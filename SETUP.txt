@@ -1,0 +1,215 @@
+================================================================================
+  CODEOPTIMIZER — COMPLETE SETUP & RUN GUIDE
+================================================================================
+
+REQUIREMENTS
+────────────
+  - macOS (these instructions are for macOS)
+  - Homebrew installed  →  https://brew.sh
+  - Internet connection for first-time downloads
+
+WHAT YOU NEED TO INSTALL (one-time)
+────────────────────────────────────
+  1. Python 3.11
+  2. Ollama  (local AI model runner)
+  3. Two AI models  (deepseek-coder:1.3b + llama3.2:1b)
+  4. Node.js / npm  (usually already present)
+
+────────────────────────────────────────────────────────────────────────────────
+  PART 1 — ONE-TIME INSTALLATION
+────────────────────────────────────────────────────────────────────────────────
+
+STEP 1 — Install Python 3.11
+──────────────────────────────
+  brew install python@3.11
+
+  Verify:
+    python3.11 --version
+    → Should print: Python 3.11.x
+
+
+STEP 2 — Install Ollama
+────────────────────────
+  brew install ollama
+
+  Verify:
+    ollama --version
+
+
+STEP 3 — Pull AI Models  (download ~1.4 GB total)
+──────────────────────────────────────────────────
+  Start Ollama first:
+    ollama serve
+
+  Then in a NEW terminal:
+    ollama pull deepseek-coder:1.3b
+    ollama pull llama3.2:1b
+
+  Verify both downloaded:
+    ollama list
+
+  NOTE: deepseek-coder:1.3b is used for Code Review, Bug Fixer, Test Generator.
+        llama3.2:1b is used for Project Planner.
+        To use bigger/better models later, change the model names in:
+          backend/src/config.py
+
+
+STEP 4 — Set Up the Python Virtual Environment
+────────────────────────────────────────────────
+  Navigate to the backend folder:
+    cd "CodeOptimizer/backend"
+
+  Create a virtual environment using Python 3.11:
+    python3.11 -m venv venv
+
+  Activate it:
+    source venv/bin/activate
+
+  Your terminal prompt should now show: (venv)
+
+  Upgrade pip:
+    pip install --upgrade pip
+
+  Install all required packages:
+    pip install fastapi uvicorn langchain langchain-ollama langchain-community \
+                langgraph pydantic pydantic-settings python-dotenv
+
+
+STEP 5 — Install Frontend Dependencies (one-time)
+───────────────────────────────────────────────────
+  cd "CodeOptimizer/frontend"
+  npm install
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PART 2 — RUNNING THE PROJECT (every time)
+────────────────────────────────────────────────────────────────────────────────
+
+You need THREE terminals open simultaneously.
+
+TERMINAL 1 — Start Ollama (AI model server)
+────────────────────────────────────────────
+  ollama serve
+
+  Keep this running. Do not close it.
+
+
+TERMINAL 2 — Start the Backend (FastAPI server)
+─────────────────────────────────────────────────
+  cd "CodeOptimizer/backend"
+  source venv/bin/activate
+  cd src
+  uvicorn main:app --reload --port 8000
+
+  You should see:
+    INFO:     Uvicorn running on http://127.0.0.1:8000
+    INFO:     Application startup complete.
+
+  Test it: open http://localhost:8000/health in a browser
+  → Should return: {"status":"ok"}
+
+  API docs: open http://localhost:8000/docs
+  → Interactive Swagger UI for testing all endpoints
+
+
+TERMINAL 3 — Start the Frontend (Electron app)
+────────────────────────────────────────────────
+  cd "CodeOptimizer/frontend"
+  npm start
+
+  The desktop app window will open.
+  The green dot in the bottom-left confirms the backend is connected.
+  A red dot means the backend is not running — check Terminal 2.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PART 3 — USING THE APP
+────────────────────────────────────────────────────────────────────────────────
+
+  Code Review       — Paste code or give a file path. Select language. Click Analyze.
+  Folder Review     — Enter a folder path. The app reviews all source files in it.
+  Bug Fixer         — Paste buggy code + the error message. Get a full fix report.
+  Test Generator    — Paste code. Get auto-generated unit tests and edge cases.
+  Project Planner   — Paste a case study or project description. Get tasks + roadmap.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PART 4 — CONFIGURATION
+────────────────────────────────────────────────────────────────────────────────
+
+  All settings are in:  backend/src/config.py
+
+  Model names (change these when you want better quality):
+    CODE_REVIEW_MODEL = "deepseek-coder:1.3b"
+    BUG_FIX_MODEL     = "deepseek-coder:1.3b"
+    TEST_GEN_MODEL    = "deepseek-coder:1.3b"
+    PLANNING_MODEL    = "llama3.2:1b"
+
+  To use a bigger model:
+    1. Pull it:    ollama pull <model-name>
+    2. Update the name in config.py
+    3. Restart the backend
+
+  Recommended upgrade path (when ready):
+    Code tasks  →  qwen2.5-coder:7b  or  codellama:7b  or  deepseek-coder:6.7b
+    Planning    →  llama3.2  (3B)    or  mistral:7b
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PART 5 — TROUBLESHOOTING
+────────────────────────────────────────────────────────────────────────────────
+
+  "uvicorn: command not found"
+  → You forgot to activate the venv.
+  → Run:  source venv/bin/activate
+
+  "ModuleNotFoundError: No module named 'X'"
+  → A package is missing. Run:  pip install <package-name>
+
+  Red dot in the app (backend offline)
+  → Check that Terminal 2 (uvicorn) is running without errors.
+  → Make sure it's on port 8000.
+
+  Ollama model not found error
+  → Run:  ollama list
+  → The model name in config.py must exactly match what is listed.
+  → Pull it if missing:  ollama pull <model-name>
+
+  Very slow responses (30–60 seconds)
+  → Normal for local AI models on first run (model loads into memory).
+  → Subsequent calls are faster once the model is warm.
+  → If consistently slow, consider running on a machine with more RAM.
+
+  Electron window blank / can't load UI
+  → Make sure you ran  npm install  in the frontend folder first.
+
+  "address already in use" on port 8000
+  → Something else is using port 8000.
+  → Kill it:  lsof -ti:8000 | xargs kill -9
+  → Or run on a different port:  uvicorn main:app --port 8001
+    (then update API = 'http://localhost:8001' in frontend/src/index.html)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  PROJECT STRUCTURE (quick reference)
+────────────────────────────────────────────────────────────────────────────────
+
+  CodeOptimizer/
+  ├── SETUP.txt                      ← This file
+  ├── backend/
+  │   ├── venv/                      ← Python virtual environment (after setup)
+  │   └── src/
+  │       ├── main.py                ← FastAPI app, all endpoints
+  │       ├── config.py              ← Model names and settings
+  │       └── agents/
+  │           ├── code_analysis.py   ← Code review agent
+  │           ├── bug_fixer.py       ← Bug fix agent
+  │           ├── test_generator.py  ← Test generation agent
+  │           └── project_planner.py ← Project planning agent
+  └── frontend/
+      ├── node_modules/              ← JS dependencies (after npm install)
+      └── src/
+          ├── main.js                ← Electron window setup
+          └── index.html             ← Full UI (all 5 feature pages)
+
+================================================================================

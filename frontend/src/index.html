@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeOptimizer</title>
+  <!-- marked.js for markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- highlight.js for code syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3248;
+      --accent: #6c63ff;
+      --accent-hover: #574fd6;
+      --accent-green: #4caf79;
+      --accent-red: #e05c5c;
+      --accent-yellow: #f0c060;
+      --text: #e4e6f0;
+      --text-muted: #8890a8;
+      --radius: 10px;
+      --font: 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+    }
+
+    .logo {
+      padding: 0 20px 24px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.5px;
+    }
+    .logo span { color: var(--text); }
+
+    .nav-section {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 20px 8px;
+      margin-top: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      font-size: 14px;
+      color: var(--text-muted);
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active {
+      border-left-color: var(--accent);
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 16px 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .status-dot.online { background: var(--accent-green); }
+
+    /* ── Main content ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .topbar-sub { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
+
+    /* ── Page ── */
+    .page { display: none; flex: 1; overflow: hidden; }
+    .page.active { display: flex; }
+
+    /* ── Split layout ── */
+    .split {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 20px;
+    }
+    .panel + .panel { border-left: 1px solid var(--border); }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Form elements ── */
+    label { font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 5px; margin-top: 12px; }
+    label:first-of-type { margin-top: 0; }
+
+    input[type="text"], select, textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    textarea {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      resize: none;
+      flex: 1;
+      line-height: 1.6;
+    }
+
+    .code-area {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    select { cursor: pointer; }
+    select option { background: var(--surface2); }
+
+    .row { display: flex; gap: 10px; align-items: flex-end; }
+    .row .grow { flex: 1; }
+
+    /* ── Buttons ── */
+    button {
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius);
+      padding: 9px 18px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--border); }
+
+    .actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+
+    /* ── Result panel ── */
+    .result-area {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 13.5px;
+      line-height: 1.7;
+    }
+
+    .result-area.empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Markdown styles inside result */
+    .result-area h2 { font-size: 16px; color: var(--accent); margin: 18px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .result-area h3 { font-size: 14px; color: var(--accent-yellow); margin: 14px 0 6px; }
+    .result-area h4 { font-size: 13px; color: var(--text); margin: 10px 0 4px; }
+    .result-area p { margin-bottom: 8px; }
+    .result-area ul, .result-area ol { padding-left: 20px; margin-bottom: 8px; }
+    .result-area li { margin-bottom: 3px; }
+    .result-area strong { color: #fff; }
+    .result-area code {
+      font-family: var(--mono);
+      background: #12141e;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+    }
+    .result-area pre {
+      background: #12141e;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      overflow-x: auto;
+      margin: 8px 0 12px;
+    }
+    .result-area pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+    .result-area hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+    .result-area blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 12px;
+      color: var(--text-muted);
+      margin: 8px 0;
+    }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-left: 8px;
+    }
+    .badge-green { background: rgba(76,175,121,0.15); color: var(--accent-green); }
+    .badge-red { background: rgba(224,92,92,0.15); color: var(--accent-red); }
+    .badge-yellow { background: rgba(240,192,96,0.15); color: var(--accent-yellow); }
+
+    /* ── Tab bar for folder review ── */
+    .tab-bar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .tab {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .tab.active-tab {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* ── Planner layout ── */
+    .planner-split {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #404565; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════ SIDEBAR ════════════════════════════ -->
+<aside class="sidebar">
+  <div class="logo">Code<span>Optimizer</span></div>
+
+  <div class="nav-section">Analysis</div>
+  <div class="nav-item active" data-page="review" onclick="switchPage('review', this)">
+    <span class="icon">🔍</span> Code Review
+  </div>
+  <div class="nav-item" data-page="folder" onclick="switchPage('folder', this)">
+    <span class="icon">📁</span> Folder Review
+  </div>
+
+  <div class="nav-section">Debugging</div>
+  <div class="nav-item" data-page="bugfix" onclick="switchPage('bugfix', this)">
+    <span class="icon">🐛</span> Bug Fixer
+  </div>
+
+  <div class="nav-section">Generation</div>
+  <div class="nav-item" data-page="testgen" onclick="switchPage('testgen', this)">
+    <span class="icon">🧪</span> Test Generator
+  </div>
+  <div class="nav-item" data-page="planner" onclick="switchPage('planner', this)">
+    <span class="icon">📋</span> Project Planner
+  </div>
+
+  <div class="sidebar-footer">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Checking...</span>
+  </div>
+</aside>
+
+<!-- ════════════════════════════ MAIN ════════════════════════════ -->
+<div class="main">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div>
+      <div id="pageTitle">Code Review</div>
+      <div class="topbar-sub" id="pageDesc">Analyze code for bugs, performance, security, and quality issues</div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Code Review ── -->
+  <div class="page active" id="page-review">
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">Input</div>
+
+        <label>Language</label>
+        <select id="reviewLang">
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="typescript">TypeScript</option>
+          <option value="java">Java</option>
+          <option value="cpp">C++</option>
+          <option value="c">C</option>
+          <option value="go">Go</option>
+          <option value="rust">Rust</option>
+          <option value="ruby">Ruby</option>
+          <option value="php">PHP</option>
+        </select>
+
+        <div style="margin-top:12px;" class="code-area">
+          <label>Paste Code</label>
+          <textarea id="reviewCode" placeholder="Paste your code here..."></textarea>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <label>— OR — File Path</label>
+          <input type="text" id="reviewFilePath" placeholder="/path/to/your/file.py" />
+        </div>
+
+        <div class="actions">
+          <button class="btn-primary" id="reviewBtn" onclick="runReview()">
+            Analyze Code
+          </button>
+          <button class="btn-secondary" onclick="clearPanel('reviewCode','reviewResult')">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Review Output</div>
+        <div class="result-area empty" id="reviewResult">
+          Run analysis to see results here
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Folder Review ── -->
+  <div class="page" id="page-folder">
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">Input</div>
+
+        <label>Folder Path</label>
+        <input type="text" id="folderPath" placeholder="/path/to/your/project" />
+
+        <label>File Extensions (comma-separated)</label>
+        <input type="text" id="folderExts" value=".py, .js, .ts, .java, .cpp" />
+
+        <label>Ignore Folders/Files (comma-separated)</label>
+        <input type="text" id="folderIgnore" value="node_modules, .git, __pycache__, .venv, dist, build" />
+
+        <div class="actions">
+          <button class="btn-primary" id="folderBtn" onclick="runFolderReview()">
+            Analyze Folder
+          </button>
+          <button class="btn-secondary" onclick="clearFolder()">Clear</button>
+        </div>
+
+        <div id="folderFileList" style="margin-top:16px;"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Results</div>
+        <div id="folderTabs" class="tab-bar"></div>
+        <div class="result-area empty" id="folderResult">
+          Run folder analysis to see results here
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Bug Fixer ── -->
+  <div class="page" id="page-bugfix">
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">Input</div>
+
+        <div class="code-area" style="max-height: 280px;">
+          <label>Paste Code</label>
+          <textarea id="bugCode" placeholder="Paste the buggy code here..."></textarea>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <label>— OR — File Path</label>
+          <input type="text" id="bugFilePath" placeholder="/path/to/buggy_file.py" />
+        </div>
+
+        <label>Error Message / Stack Trace</label>
+        <textarea id="bugError" style="height:100px; resize:vertical;"
+          placeholder="Paste the error message or stack trace here..."></textarea>
+
+        <div class="actions">
+          <button class="btn-primary" id="bugBtn" onclick="runBugFix()">
+            Fix Bug
+          </button>
+          <button class="btn-secondary" onclick="clearPanel('bugCode','bugResult'); document.getElementById('bugError').value='';">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Bug Fix Report</div>
+        <div class="result-area empty" id="bugResult">
+          Run bug analysis to see the fix report here
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Test Generator ── -->
+  <div class="page" id="page-testgen">
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">Input</div>
+
+        <label>Language</label>
+        <select id="testLang">
+          <option value="python">Python (pytest)</option>
+          <option value="javascript">JavaScript (Jest)</option>
+          <option value="typescript">TypeScript (Jest)</option>
+          <option value="java">Java (JUnit)</option>
+          <option value="go">Go (testing)</option>
+          <option value="cpp">C++ (Google Test)</option>
+        </select>
+
+        <div style="margin-top:12px;" class="code-area">
+          <label>Paste Code</label>
+          <textarea id="testCode" placeholder="Paste the code you want tests generated for..."></textarea>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <label>— OR — File Path</label>
+          <input type="text" id="testFilePath" placeholder="/path/to/your/file.py" />
+        </div>
+
+        <div class="actions">
+          <button class="btn-primary" id="testBtn" onclick="runTestGen()">
+            Generate Tests
+          </button>
+          <button class="btn-secondary" onclick="clearPanel('testCode','testResult')">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Generated Tests</div>
+        <div class="result-area empty" id="testResult">
+          Generated test code will appear here
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE: Project Planner ── -->
+  <div class="page" id="page-planner">
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">Input</div>
+
+        <div class="code-area">
+          <label>Case Study / Project Description</label>
+          <textarea id="plannerInput"
+            placeholder="Describe your project or paste a case study. The AI will extract tasks and create a full project roadmap..."></textarea>
+        </div>
+
+        <div class="actions">
+          <button class="btn-primary" id="plannerBtn" onclick="runPlanner()">
+            Generate Plan
+          </button>
+          <button class="btn-secondary" onclick="clearPanel('plannerInput','plannerResult'); document.getElementById('taskListResult').innerHTML=''; document.getElementById('taskListResult').className='result-area empty'; document.getElementById('taskListResult').textContent='Task list will appear here';">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel" style="flex: 1.5; overflow: hidden; display: flex; flex-direction: column;">
+        <div class="panel-title">Output</div>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <button class="btn-secondary" id="planTabTasks" onclick="switchPlanTab('tasks')" style="font-size:12px;padding:5px 12px;">Task List</button>
+          <button class="btn-secondary" id="planTabPlan" onclick="switchPlanTab('plan')" style="font-size:12px;padding:5px 12px;">Project Roadmap</button>
+        </div>
+        <div class="result-area empty" id="taskListResult" style="display:block;">
+          Task list will appear here
+        </div>
+        <div class="result-area empty" id="plannerResult" style="display:none;">
+          Project roadmap will appear here
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+  const API = 'http://localhost:8000';
+  let folderData = {};
+
+  // ── Navigation ──
+  const pageMeta = {
+    review:  { title: 'Code Review',      desc: 'Analyze code for bugs, performance, security, and quality issues' },
+    folder:  { title: 'Folder Review',    desc: 'Scan an entire project directory and review all source files' },
+    bugfix:  { title: 'Bug Fixer',        desc: 'Paste buggy code and an error message to get a full fix report' },
+    testgen: { title: 'Test Generator',   desc: 'Auto-generate unit tests, edge cases, and error scenarios' },
+    planner: { title: 'Project Planner',  desc: 'Convert a case study into a structured task list and project roadmap' },
+  };
+
+  function switchPage(page, el) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    el.classList.add('active');
+    document.getElementById('pageTitle').textContent = pageMeta[page].title;
+    document.getElementById('pageDesc').textContent = pageMeta[page].desc;
+  }
+
+  // ── Markdown rendering ──
+  marked.setOptions({ breaks: true, gfm: true });
+
+  function renderMarkdown(el, md) {
+    el.classList.remove('empty');
+    el.innerHTML = marked.parse(md || '');
+    el.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+  }
+
+  function setLoading(btnId, resultId, msg) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span>${msg}`;
+    const res = document.getElementById(resultId);
+    res.classList.remove('empty');
+    res.innerHTML = `<span class="spinner"></span> Processing... (this may take a moment depending on model size)`;
+  }
+
+  function resetBtn(btnId, label) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = false;
+    btn.innerHTML = label;
+  }
+
+  function clearPanel(inputId, resultId) {
+    const inp = document.getElementById(inputId);
+    if (inp) inp.value = '';
+    const res = document.getElementById(resultId);
+    res.classList.add('empty');
+    res.textContent = 'Run analysis to see results here';
+    res.innerHTML = res.textContent;
+  }
+
+  // ── API helpers ──
+  async function post(endpoint, body) {
+    const res = await fetch(API + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'Server error');
+    }
+    return res.json();
+  }
+
+  // ── Code Review ──
+  async function runReview() {
+    const code = document.getElementById('reviewCode').value.trim();
+    const filePath = document.getElementById('reviewFilePath').value.trim();
+    const lang = document.getElementById('reviewLang').value;
+
+    if (!code && !filePath) {
+      alert('Please paste code or provide a file path.');
+      return;
+    }
+
+    setLoading('reviewBtn', 'reviewResult', 'Analyzing...');
+    try {
+      const data = await post('/review_code', {
+        code: code || null,
+        file_path: filePath || null,
+        language: lang
+      });
+      const report = data.review;
+      const text = report['__inline__'] || Object.values(report)[0] || 'No output.';
+      renderMarkdown(document.getElementById('reviewResult'), text);
+    } catch (e) {
+      document.getElementById('reviewResult').innerHTML = `<span style="color:var(--accent-red)">Error: ${e.message}</span>`;
+    } finally {
+      resetBtn('reviewBtn', 'Analyze Code');
+    }
+  }
+
+  // ── Folder Review ──
+  async function runFolderReview() {
+    const folder = document.getElementById('folderPath').value.trim();
+    if (!folder) { alert('Please enter a folder path.'); return; }
+
+    const exts = document.getElementById('folderExts').value.split(',').map(s => s.trim()).filter(Boolean);
+    const ignore = document.getElementById('folderIgnore').value.split(',').map(s => s.trim()).filter(Boolean);
+
+    setLoading('folderBtn', 'folderResult', 'Scanning...');
+    document.getElementById('folderTabs').innerHTML = '';
+    folderData = {};
+
+    try {
+      const data = await post('/review_folder', {
+        folder_path: folder,
+        ignore: ignore,
+        extensions: exts
+      });
+      const report = data.review;
+      folderData = report;
+
+      const files = Object.keys(report);
+      if (!files.length) {
+        document.getElementById('folderResult').classList.add('empty');
+        document.getElementById('folderResult').textContent = 'No matching files found in the folder.';
+        return;
+      }
+
+      buildFolderTabs(files);
+      showFolderTab(files[0]);
+    } catch (e) {
+      document.getElementById('folderResult').innerHTML = `<span style="color:var(--accent-red)">Error: ${e.message}</span>`;
+    } finally {
+      resetBtn('folderBtn', 'Analyze Folder');
+    }
+  }
+
+  function buildFolderTabs(files) {
+    const bar = document.getElementById('folderTabs');
+    bar.innerHTML = '';
+    files.forEach((f, i) => {
+      const parts = f.replace(/\\/g, '/').split('/');
+      const label = parts.slice(-2).join('/');
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (i === 0 ? ' active-tab' : '');
+      tab.textContent = label;
+      tab.title = f;
+      tab.onclick = () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active-tab'));
+        tab.classList.add('active-tab');
+        showFolderTab(f);
+      };
+      bar.appendChild(tab);
+    });
+  }
+
+  function showFolderTab(file) {
+    renderMarkdown(document.getElementById('folderResult'), folderData[file] || 'No review available.');
+  }
+
+  function clearFolder() {
+    document.getElementById('folderPath').value = '';
+    document.getElementById('folderTabs').innerHTML = '';
+    folderData = {};
+    const r = document.getElementById('folderResult');
+    r.classList.add('empty');
+    r.textContent = 'Run folder analysis to see results here';
+  }
+
+  // ── Bug Fixer ──
+  async function runBugFix() {
+    const code = document.getElementById('bugCode').value.trim();
+    const filePath = document.getElementById('bugFilePath').value.trim();
+    const error = document.getElementById('bugError').value.trim();
+
+    if (!code && !filePath) { alert('Please paste code or provide a file path.'); return; }
+    if (!error) { alert('Please provide the error message.'); return; }
+
+    setLoading('bugBtn', 'bugResult', 'Fixing...');
+    try {
+      const data = await post('/fix_bug', {
+        code: code || null,
+        file_path: filePath || null,
+        error_message: error
+      });
+      const report = data.report;
+      const text = report['final_report'] || Object.values(report).join('\n\n---\n\n');
+      renderMarkdown(document.getElementById('bugResult'), text);
+    } catch (e) {
+      document.getElementById('bugResult').innerHTML = `<span style="color:var(--accent-red)">Error: ${e.message}</span>`;
+    } finally {
+      resetBtn('bugBtn', 'Fix Bug');
+    }
+  }
+
+  // ── Test Generator ──
+  async function runTestGen() {
+    const code = document.getElementById('testCode').value.trim();
+    const filePath = document.getElementById('testFilePath').value.trim();
+    const lang = document.getElementById('testLang').value;
+
+    if (!code && !filePath) { alert('Please paste code or provide a file path.'); return; }
+
+    setLoading('testBtn', 'testResult', 'Generating...');
+    try {
+      const data = await post('/generate_tests', {
+        code: code || null,
+        file_path: filePath || null,
+        language: lang
+      });
+      const tests = data.tests || '';
+      // wrap in markdown code block if not already
+      const md = tests.startsWith('```') ? tests : '```' + lang + '\n' + tests + '\n```';
+      renderMarkdown(document.getElementById('testResult'), md);
+    } catch (e) {
+      document.getElementById('testResult').innerHTML = `<span style="color:var(--accent-red)">Error: ${e.message}</span>`;
+    } finally {
+      resetBtn('testBtn', 'Generate Tests');
+    }
+  }
+
+  // ── Project Planner ──
+  let plannerCurrentTab = 'tasks';
+
+  function switchPlanTab(tab) {
+    plannerCurrentTab = tab;
+    document.getElementById('taskListResult').style.display = tab === 'tasks' ? 'block' : 'none';
+    document.getElementById('plannerResult').style.display = tab === 'plan' ? 'block' : 'none';
+    document.getElementById('planTabTasks').style.background = tab === 'tasks' ? 'var(--accent)' : '';
+    document.getElementById('planTabTasks').style.color = tab === 'tasks' ? '#fff' : '';
+    document.getElementById('planTabPlan').style.background = tab === 'plan' ? 'var(--accent)' : '';
+    document.getElementById('planTabPlan').style.color = tab === 'plan' ? '#fff' : '';
+  }
+
+  async function runPlanner() {
+    const input = document.getElementById('plannerInput').value.trim();
+    if (!input) { alert('Please enter a case study or project description.'); return; }
+
+    const btn = document.getElementById('plannerBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Planning...';
+
+    const tl = document.getElementById('taskListResult');
+    const pr = document.getElementById('plannerResult');
+    tl.classList.remove('empty');
+    tl.innerHTML = '<span class="spinner"></span> Extracting tasks...';
+    pr.classList.remove('empty');
+    pr.innerHTML = '<span class="spinner"></span> Building roadmap...';
+
+    try {
+      const data = await post('/create_plan', { case_study: input });
+      renderMarkdown(tl, data.plan.task_list || 'No task list generated.');
+      renderMarkdown(pr, data.plan.project_plan || 'No plan generated.');
+      switchPlanTab('tasks');
+    } catch (e) {
+      tl.innerHTML = `<span style="color:var(--accent-red)">Error: ${e.message}</span>`;
+      pr.innerHTML = '';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Generate Plan';
+    }
+  }
+
+  // ── Health check ──
+  async function checkHealth() {
+    try {
+      const r = await fetch(API + '/health');
+      const ok = r.ok;
+      document.getElementById('statusDot').className = 'status-dot' + (ok ? ' online' : '');
+      document.getElementById('statusText').textContent = ok ? 'Backend online' : 'Backend offline';
+    } catch {
+      document.getElementById('statusDot').className = 'status-dot';
+      document.getElementById('statusText').textContent = 'Backend offline';
+    }
+  }
+
+  checkHealth();
+  setInterval(checkHealth, 10000);
+
+  // Allow Enter in single-line inputs to trigger actions (not textareas)
+  document.getElementById('reviewFilePath').addEventListener('keydown', e => { if (e.key === 'Enter') runReview(); });
+  document.getElementById('folderPath').addEventListener('keydown', e => { if (e.key === 'Enter') runFolderReview(); });
+  document.getElementById('bugFilePath').addEventListener('keydown', e => { if (e.key === 'Enter') runBugFix(); });
+  document.getElementById('testFilePath').addEventListener('keydown', e => { if (e.key === 'Enter') runTestGen(); });
+</script>
+
+</body>
+</html>
