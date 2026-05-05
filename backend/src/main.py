@@ -1,6 +1,7 @@
+import json
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -10,6 +11,7 @@ from agents.code_analysis import get_code_review_for_code, get_code_review_for_f
 from agents.bug_fixer import get_bug_fixer_for_code, get_bug_fixer
 from agents.test_generator import get_test_cases
 from agents.project_planner import get_project_plan
+from agents.github_agent import verify_signature, handle_push, handle_pull_request
 
 app = FastAPI(title="CodeOptimizer", version="1.0")
 
@@ -100,6 +102,44 @@ async def generate_tests(req: TestGenRequest) -> dict:
 @app.post("/create_plan")
 async def create_plan(req: PlanRequest) -> dict:
     return {"plan": get_project_plan(req.case_study)}
+
+
+# ── GitHub Webhook ─────────────────────────────────────────────────────────────
+
+@app.post("/webhook/github")
+async def github_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Receives GitHub push and pull_request webhook events.
+    Responds immediately with 200 so GitHub doesn't time out,
+    then runs the code analysis and posts results in the background.
+    """
+    payload_bytes = await request.body()
+    event = request.headers.get("X-GitHub-Event", "")
+    signature = request.headers.get("X-Hub-Signature-256", "")
+
+    # Verify the request genuinely came from GitHub
+    if settings.GITHUB_SECRET:
+        if not verify_signature(payload_bytes, signature, settings.GITHUB_SECRET):
+            raise HTTPException(status_code=401, detail="Invalid webhook signature.")
+
+    if not settings.GITHUB_TOKEN:
+        raise HTTPException(status_code=500, detail="GITHUB_TOKEN is not configured.")
+
+    payload = json.loads(payload_bytes)
+
+    if event == "push":
+        # Only analyze pushes to branches, not tag pushes
+        ref = payload.get("ref", "")
+        if ref.startswith("refs/heads/"):
+            background_tasks.add_task(handle_push, payload, settings.GITHUB_TOKEN)
+
+    elif event == "pull_request":
+        action = payload.get("action", "")
+        if action in ("opened", "synchronize", "reopened"):
+            background_tasks.add_task(handle_pull_request, payload, settings.GITHUB_TOKEN)
+
+    # Always respond quickly — analysis runs in the background
+    return {"status": "received", "event": event}
 
 
 # ── Legacy GET endpoints (kept for backward compatibility) ─────────────────────

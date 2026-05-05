@@ -2,214 +2,366 @@
   CODEOPTIMIZER — COMPLETE SETUP & RUN GUIDE
 ================================================================================
 
-REQUIREMENTS
-────────────
-  - macOS (these instructions are for macOS)
-  - Homebrew installed  →  https://brew.sh
-  - Internet connection for first-time downloads
+  GitHub Repo:  https://github.com/AtishayJain71/CodeOptimizer
 
-WHAT YOU NEED TO INSTALL (one-time)
-────────────────────────────────────
-  1. Python 3.11
-  2. Ollama  (local AI model runner)
-  3. Two AI models  (deepseek-coder:1.3b + llama3.2:1b)
-  4. Node.js / npm  (usually already present)
+  What this project does:
+    - AI-powered code review (paste code or give a file/folder path)
+    - Bug fixer with root cause analysis and corrected code
+    - Auto test case generator
+    - Project planner from a case study description
+    - GitHub webhook: auto-reviews code on every push or Pull Request
 
-────────────────────────────────────────────────────────────────────────────────
-  PART 1 — ONE-TIME INSTALLATION
-────────────────────────────────────────────────────────────────────────────────
 
-STEP 1 — Install Python 3.11
+================================================================================
+  PART 1 — ONE-TIME INSTALLATION  (do this once on a new machine)
+================================================================================
+
+STEP 1 — Install Homebrew  (if not already installed)
+───────────────────────────────────────────────────────
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+
+STEP 2 — Install Python 3.11
 ──────────────────────────────
   brew install python@3.11
 
   Verify:
     python3.11 --version
-    → Should print: Python 3.11.x
+    → Must print: Python 3.11.x
+    (The system Python 3.9 will NOT work — too old for LangGraph)
 
 
-STEP 2 — Install Ollama
-────────────────────────
+STEP 3 — Install Ollama  (local AI model runner)
+──────────────────────────────────────────────────
   brew install ollama
 
   Verify:
     ollama --version
 
 
-STEP 3 — Pull AI Models  (download ~1.4 GB total)
-──────────────────────────────────────────────────
-  Start Ollama first:
+STEP 4 — Install ngrok  (exposes local server for GitHub webhook)
+──────────────────────────────────────────────────────────────────
+  brew install ngrok
+
+
+STEP 5 — Pull AI Models  (~1.4 GB total download)
+───────────────────────────────────────────────────
+  First start Ollama in a terminal:
     ollama serve
 
-  Then in a NEW terminal:
+  Then in a NEW terminal, pull the models:
     ollama pull deepseek-coder:1.3b
     ollama pull llama3.2:1b
 
   Verify both downloaded:
     ollama list
 
-  NOTE: deepseek-coder:1.3b is used for Code Review, Bug Fixer, Test Generator.
-        llama3.2:1b is used for Project Planner.
-        To use bigger/better models later, change the model names in:
-          backend/src/config.py
+  Models used:
+    deepseek-coder:1.3b  →  Code Review, Bug Fixer, Test Generator
+    llama3.2:1b          →  Project Planner
+
+  To upgrade to better models later:
+    ollama pull <model-name>
+    Update model names in backend/src/config.py
+    Restart the backend
+
+  Recommended upgrades when ready:
+    Code tasks  →  qwen2.5-coder:7b  or  deepseek-coder:6.7b
+    Planning    →  llama3.2 (3B)     or  mistral:7b
 
 
-STEP 4 — Set Up the Python Virtual Environment
+STEP 6 — Set Up the Python Virtual Environment
 ────────────────────────────────────────────────
-  Navigate to the backend folder:
-    cd "CodeOptimizer/backend"
+  cd "/path/to/CodeOptimizer/backend"
 
-  Create a virtual environment using Python 3.11:
+  Create the venv with Python 3.11:
     python3.11 -m venv venv
 
   Activate it:
     source venv/bin/activate
-
-  Your terminal prompt should now show: (venv)
+    (Your prompt will now show "(venv)")
 
   Upgrade pip:
     pip install --upgrade pip
 
-  Install all required packages:
-    pip install fastapi uvicorn langchain langchain-ollama langchain-community \
-                langgraph pydantic pydantic-settings python-dotenv
+  Install all dependencies:
+    pip install -r requirements.txt
+
+  Verify key packages installed:
+    pip show fastapi uvicorn langchain langgraph
 
 
-STEP 5 — Install Frontend Dependencies (one-time)
-───────────────────────────────────────────────────
-  cd "CodeOptimizer/frontend"
+STEP 7 — Install Frontend Dependencies
+────────────────────────────────────────
+  cd "/path/to/CodeOptimizer/frontend"
   npm install
 
 
-────────────────────────────────────────────────────────────────────────────────
-  PART 2 — RUNNING THE PROJECT (every time)
-────────────────────────────────────────────────────────────────────────────────
+STEP 8 — Create the .env file  (secrets for GitHub webhook)
+─────────────────────────────────────────────────────────────
+  cd "/path/to/CodeOptimizer/backend"
+  cp .env.example .env
 
-You need THREE terminals open simultaneously.
+  Open backend/.env and fill in two values:
 
-TERMINAL 1 — Start Ollama (AI model server)
-────────────────────────────────────────────
+    GITHUB_SECRET=<generate with: python3 -c "import secrets; print(secrets.token_hex(32))">
+    GITHUB_TOKEN=<your GitHub Personal Access Token>
+
+  How to get a GitHub Personal Access Token:
+    GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+    → Generate new token (classic)
+    → Select scope: repo
+    → Copy the token (shown only once)
+
+  IMPORTANT: Never commit the .env file. It is already in .gitignore.
+
+
+================================================================================
+  PART 2 — RUNNING THE PROJECT  (every time you want to use it)
+================================================================================
+
+  You need FOUR terminals open simultaneously.
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  Terminal 1  │  ollama serve                                            │
+  │  Terminal 2  │  uvicorn (FastAPI backend)                               │
+  │  Terminal 3  │  ngrok (only needed for GitHub webhook)                  │
+  │  Terminal 4  │  npm start (Electron UI)                                 │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+TERMINAL 1 — Ollama
+────────────────────────────────────────────────────────────────────────────────
   ollama serve
 
-  Keep this running. Do not close it.
+  Keep this running at all times. Never close it while using the app.
 
 
-TERMINAL 2 — Start the Backend (FastAPI server)
-─────────────────────────────────────────────────
-  cd "CodeOptimizer/backend"
+────────────────────────────────────────────────────────────────────────────────
+TERMINAL 2 — Backend (FastAPI)
+────────────────────────────────────────────────────────────────────────────────
+  cd "/path/to/CodeOptimizer/backend"
   source venv/bin/activate
   cd src
-  uvicorn main:app --reload --port 8000
+  uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-  You should see:
-    INFO:     Uvicorn running on http://127.0.0.1:8000
+  IMPORTANT: Use --host 0.0.0.0  (not the default 127.0.0.1).
+             Without it, ngrok cannot reach the server (IPv6 vs IPv4 conflict).
+
+  Wait until you see:
+    INFO:     Uvicorn running on http://0.0.0.0:8000
     INFO:     Application startup complete.
 
-  Test it: open http://localhost:8000/health in a browser
-  → Should return: {"status":"ok"}
-
-  API docs: open http://localhost:8000/docs
-  → Interactive Swagger UI for testing all endpoints
+  Test in browser (paste in address bar — NOT Google search):
+    http://localhost:8000/health   →  {"status":"ok"}
+    http://localhost:8000/docs     →  Interactive API docs
 
 
-TERMINAL 3 — Start the Frontend (Electron app)
-────────────────────────────────────────────────
-  cd "CodeOptimizer/frontend"
+────────────────────────────────────────────────────────────────────────────────
+TERMINAL 3 — ngrok  (GitHub webhook tunnel)
+────────────────────────────────────────────────────────────────────────────────
+  IMPORTANT: Start the backend (Terminal 2) BEFORE starting ngrok.
+             ngrok will fail with "connection refused" if backend isn't running.
+
+  ngrok http 127.0.0.1:8000
+
+  ngrok will print a public URL like:
+    https://abc123.ngrok-free.app
+
+  Your webhook URL is:
+    https://abc123.ngrok-free.app/webhook/github
+
+  Test it (paste in browser address bar):
+    https://abc123.ngrok-free.app/health  →  {"status":"ok"}
+
+  NOTE: The ngrok URL changes every time you restart ngrok (free plan).
+        You must update the Payload URL in GitHub webhook settings each time.
+
+  Monitor incoming webhook requests:
+    http://localhost:4040   →  ngrok web inspector (all requests shown here)
+
+
+────────────────────────────────────────────────────────────────────────────────
+TERMINAL 4 — Frontend (Electron app)
+────────────────────────────────────────────────────────────────────────────────
+  cd "/path/to/CodeOptimizer/frontend"
   npm start
 
-  The desktop app window will open.
-  The green dot in the bottom-left confirms the backend is connected.
-  A red dot means the backend is not running — check Terminal 2.
+  The desktop app window opens automatically.
+  Green dot in the bottom-left = backend is connected.
+  Red dot = backend not running (check Terminal 2).
 
 
-────────────────────────────────────────────────────────────────────────────────
-  PART 3 — USING THE APP
-────────────────────────────────────────────────────────────────────────────────
+================================================================================
+  PART 3 — GITHUB WEBHOOK SETUP
+================================================================================
 
-  Code Review       — Paste code or give a file path. Select language. Click Analyze.
-  Folder Review     — Enter a folder path. The app reviews all source files in it.
-  Bug Fixer         — Paste buggy code + the error message. Get a full fix report.
-  Test Generator    — Paste code. Get auto-generated unit tests and edge cases.
-  Project Planner   — Paste a case study or project description. Get tasks + roadmap.
+  This makes CodeOptimizer automatically review code whenever you push
+  to GitHub or open a Pull Request.
+
+  Do this once (or any time the webhook URL changes after ngrok restart):
+
+  1. Go to your GitHub repository:
+       https://github.com/AtishayJain71/CodeOptimizer/settings/hooks
+
+  2. Click "Add webhook" (or edit existing one) and fill in:
+
+       Payload URL:   https://<your-ngrok-url>.ngrok-free.app/webhook/github
+       Content type:  application/json
+       Secret:        <same value as GITHUB_SECRET in your .env file>
+       Events:        Select "Let me select individual events"
+                      Check: ✅ Pushes
+                             ✅ Pull requests
+
+  3. Click "Add webhook"
+     GitHub sends a ping — you should see a green tick ✓
+
+  HOW THE WEBHOOK WORKS
+  ──────────────────────
+    You push code to GitHub
+          ↓
+    GitHub sends POST to /webhook/github
+          ↓
+    Backend verifies HMAC signature (using GITHUB_SECRET)
+          ↓
+    Backend fetches changed files via GitHub API (using GITHUB_TOKEN)
+          ↓
+    AI analyzes each changed file (30–120 seconds per file)
+          ↓
+    Review posted as a comment on the commit or Pull Request on GitHub
+
+  WHAT GETS ANALYZED
+  ───────────────────
+    Code files:  .py .js .ts .jsx .tsx .java .cpp .c .go .rs .rb .php .cs .swift .kt
+    Skipped:     config files, markdown, images, binaries, files over 80 KB
+    Limit:       Max 8 files per push/PR event
+
+  VERIFY IT IS WORKING
+  ─────────────────────
+    After pushing, check deliveries:
+      GitHub → repo → Settings → Webhooks → your webhook → Recent Deliveries
+
+    Green tick = delivered (200 response from your server)
+    Red X      = failed (check Response tab for error details)
+
+    Also check from terminal:
+      curl -s http://localhost:4040/api/requests/http | python3 -c "
+      import json,sys
+      for r in json.load(sys.stdin)['requests'][-5:]:
+          print(r['start'][-14:], r['request']['method'], r['request']['uri'], '->', r['response']['status_code'])
+      "
+    You should see:  POST  /webhook/github  ->  200
 
 
-────────────────────────────────────────────────────────────────────────────────
-  PART 4 — CONFIGURATION
-────────────────────────────────────────────────────────────────────────────────
+================================================================================
+  PART 4 — USING THE APP
+================================================================================
 
-  All settings are in:  backend/src/config.py
+  Code Review      Paste code or give a file path. Select language. Click Analyze.
+  Folder Review    Enter a folder path. Analyzes all source files inside it.
+  Bug Fixer        Paste buggy code + the error message. Get a full fix report.
+  Test Generator   Paste code. Get unit tests, edge cases, and error scenarios.
+  Project Planner  Paste a case study or description. Get a task list + roadmap.
 
-  Model names (change these when you want better quality):
+  Responses take 30–120 seconds — the AI model is running locally.
+  First call after starting is slower (model loads into memory).
+
+
+================================================================================
+  PART 5 — CONFIGURATION
+================================================================================
+
+  All settings:       backend/src/config.py
+  Secrets (.env):     backend/.env  (never commit this file)
+
+  Model names in config.py:
     CODE_REVIEW_MODEL = "deepseek-coder:1.3b"
     BUG_FIX_MODEL     = "deepseek-coder:1.3b"
     TEST_GEN_MODEL    = "deepseek-coder:1.3b"
     PLANNING_MODEL    = "llama3.2:1b"
 
-  To use a bigger model:
-    1. Pull it:    ollama pull <model-name>
-    2. Update the name in config.py
-    3. Restart the backend
-
-  Recommended upgrade path (when ready):
-    Code tasks  →  qwen2.5-coder:7b  or  codellama:7b  or  deepseek-coder:6.7b
-    Planning    →  llama3.2  (3B)    or  mistral:7b
+  To change a model:
+    1.  ollama pull <new-model-name>
+    2.  Edit the name in config.py
+    3.  Restart Terminal 2 (uvicorn)
 
 
-────────────────────────────────────────────────────────────────────────────────
-  PART 5 — TROUBLESHOOTING
-────────────────────────────────────────────────────────────────────────────────
+================================================================================
+  PART 6 — TROUBLESHOOTING
+================================================================================
 
   "uvicorn: command not found"
-  → You forgot to activate the venv.
-  → Run:  source venv/bin/activate
+  → Forgot to activate the venv.
+  → Run: source venv/bin/activate
 
   "ModuleNotFoundError: No module named 'X'"
-  → A package is missing. Run:  pip install <package-name>
+  → Package missing from venv.
+  → Run: pip install -r requirements.txt
 
-  Red dot in the app (backend offline)
-  → Check that Terminal 2 (uvicorn) is running without errors.
-  → Make sure it's on port 8000.
+  Red dot in app (backend offline)
+  → Uvicorn not running or crashed. Check Terminal 2 for errors.
 
-  Ollama model not found error
-  → Run:  ollama list
-  → The model name in config.py must exactly match what is listed.
-  → Pull it if missing:  ollama pull <model-name>
+  ngrok "connection refused" error
+  → Backend is not running. Start Terminal 2 first, then ngrok.
+  → Also check: ngrok http 127.0.0.1:8000  (use IPv4 explicitly)
 
-  Very slow responses (30–60 seconds)
-  → Normal for local AI models on first run (model loads into memory).
-  → Subsequent calls are faster once the model is warm.
-  → If consistently slow, consider running on a machine with more RAM.
+  GitHub webhook shows red X in Recent Deliveries
+  → Check the Response tab on GitHub for the error message.
+  → Most common cause: wrong Payload URL (must end with /webhook/github)
+  → Second cause: Secret in GitHub does not match GITHUB_SECRET in .env
 
-  Electron window blank / can't load UI
-  → Make sure you ran  npm install  in the frontend folder first.
+  Webhook delivers 200 but no comment appears on GitHub
+  → Analysis is still running (takes 30–120 seconds per file).
+  → Wait and refresh the commit/PR page.
+  → If still nothing after 3 minutes, GITHUB_TOKEN may lack permissions.
+  →   Fix: regenerate token with "repo" scope and update backend/.env
+
+  ngrok URL changed (restarted ngrok)
+  → Update Payload URL in GitHub → repo → Settings → Webhooks
+
+  Ollama model not found
+  → Run: ollama list  (check exact model name)
+  → Pull it: ollama pull <model-name>
+  → Model name in config.py must match exactly
 
   "address already in use" on port 8000
-  → Something else is using port 8000.
-  → Kill it:  lsof -ti:8000 | xargs kill -9
-  → Or run on a different port:  uvicorn main:app --port 8001
-    (then update API = 'http://localhost:8001' in frontend/src/index.html)
+  → Kill it: lsof -ti:8000 | xargs kill -9
+
+  Very slow first response (60+ seconds)
+  → Normal — model is loading into memory on first call.
+  → Subsequent calls in the same session are faster.
 
 
-────────────────────────────────────────────────────────────────────────────────
-  PROJECT STRUCTURE (quick reference)
-────────────────────────────────────────────────────────────────────────────────
+================================================================================
+  PROJECT STRUCTURE
+================================================================================
 
   CodeOptimizer/
-  ├── SETUP.txt                      ← This file
+  ├── SETUP.txt                       ← This file
+  ├── LICENSE
+  ├── .gitignore
   ├── backend/
-  │   ├── venv/                      ← Python virtual environment (after setup)
+  │   ├── .env.example                ← Template — copy to .env and fill in
+  │   ├── .env                        ← Real secrets (gitignored, never commit)
+  │   ├── requirements.txt            ← Python dependencies
+  │   ├── venv/                       ← Python virtual environment (gitignored)
+  │   ├── test/
+  │   │   ├── buggy_code.py           ← Sample buggy code for testing
+  │   │   └── error_example.py        ← Sample error scenarios for testing
   │   └── src/
-  │       ├── main.py                ← FastAPI app, all endpoints
-  │       ├── config.py              ← Model names and settings
+  │       ├── main.py                 ← FastAPI app — all endpoints + webhook
+  │       ├── config.py               ← Models, GitHub tokens, all settings
   │       └── agents/
-  │           ├── code_analysis.py   ← Code review agent
-  │           ├── bug_fixer.py       ← Bug fix agent
-  │           ├── test_generator.py  ← Test generation agent
-  │           └── project_planner.py ← Project planning agent
+  │           ├── code_analysis.py    ← Code review agent (LangGraph)
+  │           ├── bug_fixer.py        ← Bug fix agent (LangGraph)
+  │           ├── test_generator.py   ← Test generation agent (LangGraph)
+  │           ├── project_planner.py  ← Project planning agent (LangGraph)
+  │           └── github_agent.py     ← GitHub webhook handler
   └── frontend/
-      ├── node_modules/              ← JS dependencies (after npm install)
+      ├── package.json
+      ├── node_modules/               ← JS dependencies (gitignored)
       └── src/
-          ├── main.js                ← Electron window setup
-          └── index.html             ← Full UI (all 5 feature pages)
+          ├── main.js                 ← Electron window configuration
+          └── index.html              ← Full UI — all 5 feature pages
 
 ================================================================================
