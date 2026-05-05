@@ -45,14 +45,3 @@ We welcome contributions to **CodeOptimizer**. Whether you're interested in bug 
 5. Push to your branch (`git push origin feature-name`)
 6. Create a pull request
 
-## 👩‍💻 Authors
-
-- **[Danula Rathnayaka](https://github.com/danula-rathnayaka)** - Project Lead Developer
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](docs/LICENSE) file for details.
-
-## 💬 Contact
-
-For questions or suggestions, feel free to reach out to me at [danusathmin@gmail.com](mailto:danusathmin@gmail.com).
