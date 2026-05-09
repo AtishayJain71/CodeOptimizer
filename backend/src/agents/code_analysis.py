@@ -11,25 +11,25 @@ from config import settings
 llm = OllamaLLM(
     model=settings.CODE_REVIEW_MODEL,
     temperature=settings.LLM_TEMPERATURE,
-    num_predict=settings.REVIEW_MAX_TOKENS,
 )
 
 llm_short = OllamaLLM(
     model=settings.CODE_REVIEW_MODEL,
     temperature=settings.LLM_TEMPERATURE,
-    num_predict=settings.GITHUB_MAX_TOKENS,
+    num_predict=settings.GITHUB_MAX_TOKENS,  # GitHub PR comments must stay short
 )
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
-FULL_REVIEW_PROMPT = """You are a senior code reviewer. Analyze this {language} code strictly.
+FULL_REVIEW_PROMPT = """You are a senior code reviewer. Review the {language} code below.
 
-RULES:
-- Only report issues that are DIRECTLY VISIBLE in the code below. No assumptions.
-- Rank by severity: CRITICAL first, then SECURITY, then PERF, then QUALITY.
-- Merge related issues into one bullet. No duplicates.
-- Hard stop after 5 bullets. If fewer real issues exist, list only those.
-- Each bullet: one line description + one line fix. No padding.
+Rules (follow strictly):
+- Only report issues that are LITERALLY VISIBLE in the code. No guessing, no assumptions.
+- Each distinct issue must appear EXACTLY ONCE. Writing the same bullet twice is an error.
+- If two issues share the same root cause, combine them into ONE bullet. No duplicates.
+- Rank: 🔴 CRITICAL bugs first → 🟠 SECURITY → 🟡 PERFORMANCE → 🟢 CODE QUALITY last.
+- Each bullet format: [emoji] **Label**: what is wrong. Fix: what to change.
+- Maximum 8 bullets total. Each bullet must describe a DIFFERENT issue. Stop after all unique issues are listed.
 
 ```{language}
 {code}
@@ -37,14 +37,14 @@ RULES:
 
 ## Code Review
 
-**Priority Issues** (🔴 CRITICAL → 🟠 SECURITY → 🟡 PERF → 🟢 QUALITY):
 """
 
 SHORT_REVIEW_PROMPT = """Review this {language} code for a GitHub PR. Be strict and concise.
 
 RULES:
 - Only report issues visible in the code. No guessing.
-- Merge related issues. No duplicates. Max 5 bullets. Stop after 5.
+- Merge related issues. No duplicates.
+- Each bullet: one line problem + one line fix.
 
 ```{language}
 {code}
@@ -52,6 +52,22 @@ RULES:
 
 Issues (most critical first):
 """
+
+
+# ── Deduplication ─────────────────────────────────────────────────────────────
+
+def _deduplicate_review(text: str) -> str:
+    """Remove repeated lines from LLM output (local models tend to loop)."""
+    seen = set()
+    result = []
+    for line in text.splitlines():
+        key = " ".join(line.split())  # normalise whitespace before comparing
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        result.append(line)
+    return "\n".join(result)
 
 
 # ── State ──────────────────────────────────────────────────────────────────────
@@ -101,7 +117,7 @@ def review_code(state: CodeReviewState) -> CodeReviewState:
 
     if state.code:
         prompt = prompt_template.format(language=state.language, code=state.code)
-        report["__inline__"] = model.invoke(prompt)
+        report["__inline__"] = _deduplicate_review(model.invoke(prompt))
         return state.model_copy(update={"report": report})
 
     for file in state.files_found:
@@ -114,7 +130,7 @@ def review_code(state: CodeReviewState) -> CodeReviewState:
         _, ext = os.path.splitext(file)
         language = ext.lstrip(".") or "text"
         prompt = prompt_template.format(language=language, code=code)
-        report[file] = model.invoke(prompt)
+        report[file] = _deduplicate_review(model.invoke(prompt))
 
     return state.model_copy(update={"report": report})
 

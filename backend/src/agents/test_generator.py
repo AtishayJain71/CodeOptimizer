@@ -10,7 +10,6 @@ from config import settings
 llm = OllamaLLM(
     model=settings.TEST_GEN_MODEL,
     temperature=settings.LLM_TEMPERATURE,
-    num_predict=settings.TESTGEN_MAX_TOKENS,
 )
 
 # Language → test framework mapping shown to the model

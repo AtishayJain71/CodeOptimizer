@@ -10,33 +10,28 @@ from config import settings
 llm = OllamaLLM(
     model=settings.BUG_FIX_MODEL,
     temperature=settings.LLM_TEMPERATURE,
-    num_predict=settings.BUGFIX_MAX_TOKENS,
 )
 
 # Single prompt that does analysis + fix + corrected code in one shot.
 # One LLM call instead of four — ~4x faster.
-BUG_FIX_PROMPT = """You are an expert software debugger. Analyze the bug and provide the fix.
+BUG_FIX_PROMPT = """Fix the following bug.
 
-Error:
+Error message:
 {error_message}
 
 Code:
-```
 {code}
-```
 
-Respond using EXACTLY this format (no extra text):
+Write your answer using these three sections. Do not skip any section.
 
 ## Root Cause
-[1-2 sentences: what is wrong and why]
+Explain what is causing the error and why.
 
 ## Fix
-[2-4 bullet points: what needs to change]
+List every change that is needed, one change per line.
 
 ## Fixed Code
-```
-[complete corrected and runnable code — no placeholders]
-```"""
+Write the complete corrected code with all fixes applied. Do not use placeholders."""
 
 
 class BugFixState(BaseModel):

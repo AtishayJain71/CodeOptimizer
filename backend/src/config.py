@@ -13,14 +13,15 @@ class Settings(BaseSettings):
     PLANNING_MODEL: str = "llama3.2:1b"
     TEST_GEN_MODEL: str = "deepseek-coder:1.3b"
 
-    # LLM generation limits — critical for speed.
-    # num_predict caps how many tokens the model outputs (fewer = faster).
-    # temperature 0.1 = more deterministic, better for code tasks.
-    REVIEW_MAX_TOKENS: int = 1000      # code review output cap
-    BUGFIX_MAX_TOKENS: int = 1200      # bug fix needs more room for rewritten code
-    TESTGEN_MAX_TOKENS: int = 1500     # test code can be longer
-    PLAN_MAX_TOKENS: int = 900         # planning output cap
-    GITHUB_MAX_TOKENS: int = 600       # GitHub comments must be short
+    # GitHub comment token limit — kept short so comments fit in PR timeline.
+    # All other agents have no num_predict cap; conciseness is enforced via prompt.
+    GITHUB_MAX_TOKENS: int = 600
+
+    # Chat history turns to keep in context.
+    # deepseek-coder:1.3b has a 4096-token context window.
+    # Budget: ~1500 tokens (code + review) + CHAT_HISTORY_TURNS * ~200 tokens each.
+    # Keep CHAT_HISTORY_TURNS ≤ 12 to stay within the 4096-token window.
+    CHAT_HISTORY_TURNS: int = 6
 
     LLM_TEMPERATURE: float = 0.1
 

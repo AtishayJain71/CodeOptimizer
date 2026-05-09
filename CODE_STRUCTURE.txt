@@ -1,0 +1,156 @@
+CodeOptimizer — Code Structure
+===============================
+
+Root
+├── SETUP.txt               Complete setup and run guide (Python, Ollama, ngrok, etc.)
+├── CODE_STRUCTURE.txt      This file
+├── README.md               Project overview
+├── .gitignore              Excludes venv/, __pycache__/, .env, *.bin, node_modules/, etc.
+│
+├── backend/
+│   ├── .env                Environment variables — NOT committed (git-ignored)
+│   │                         GITHUB_SECRET, GITHUB_TOKEN, model overrides
+│   ├── .env.example        Template for .env — safe to commit, no real credentials
+│   ├── requirements.txt    Python dependencies (pip install -r requirements.txt)
+│   │
+│   └── src/
+│       ├── main.py         FastAPI application — all API endpoints
+│       │                     POST /review_code/stream   — streaming code review (SSE)
+│       │                     POST /review_code          — non-streaming code review
+│       │                     POST /review_folder        — review all files in a folder
+│       │                     POST /fix_bug/stream       — streaming bug fix (SSE)
+│       │                     POST /fix_bug              — non-streaming bug fix
+│       │                     POST /generate_tests/stream— streaming test generation (SSE)
+│       │                     POST /generate_tests       — non-streaming test generation
+│       │                     POST /create_plan          — project planning (non-streaming)
+│       │                     POST /chat/stream          — conversational follow-up (SSE)
+│       │                     POST /webhook/github       — GitHub webhook receiver
+│       │                     GET  /health               — health check
+│       │                     GET  /review_file          — legacy single-file review
+│       │
+│       ├── config.py       Pydantic-settings config — reads backend/.env
+│       │                     MODEL names: CODE_REVIEW_MODEL, BUG_FIX_MODEL,
+│       │                                  TEST_GEN_MODEL, PLANNING_MODEL
+│       │                     GITHUB_MAX_TOKENS: 600 (short PR comments)
+│       │                     CHAT_HISTORY_TURNS: 6 (context window management)
+│       │                     LLM_TEMPERATURE: 0.1
+│       │                     GITHUB_SECRET, GITHUB_TOKEN, ALLOWED_ORIGINS
+│       │
+│       └── agents/
+│           ├── code_analysis.py
+│           │     LangGraph workflow + Ollama LLM for code review
+│           │     - llm: full review (no token cap, prompt-guided conciseness)
+│           │     - llm_short: GitHub PR comments (capped at GITHUB_MAX_TOKENS)
+│           │     - FULL_REVIEW_PROMPT: severity-ranked, max 8 bullets, no repetition
+│           │     - SHORT_REVIEW_PROMPT: compact version for GitHub comments
+│           │     - stream_code_review(): yields tokens for SSE
+│           │     - get_code_review_for_code(): non-streaming, returns dict
+│           │     - get_code_review_for_folder(): walks directory, reviews each file
+│           │     - get_short_review_for_code(): for GitHub webhook comments
+│           │
+│           ├── bug_fixer.py
+│           │     LangGraph workflow + Ollama LLM for bug analysis
+│           │     - Single LLM call: root cause + fix plan + corrected code
+│           │     - BUG_FIX_PROMPT: 3-section format (Root Cause / Fix / Fixed Code)
+│           │     - stream_bug_fix(): yields tokens for SSE
+│           │     - get_bug_fixer_for_code(): non-streaming
+│           │     - get_bug_fixer(): non-streaming, reads from file path
+│           │
+│           ├── test_generator.py
+│           │     LangGraph workflow + Ollama LLM for unit test generation
+│           │     - FRAMEWORK map: python→pytest, js→Jest, java→JUnit5, etc.
+│           │     - TEST_PROMPT: outputs only runnable code, no explanations
+│           │     - stream_tests(): yields tokens for SSE
+│           │     - get_test_cases(): non-streaming, strips markdown fences from output
+│           │
+│           ├── project_planner.py
+│           │     LangGraph workflow + Ollama LLM for project planning
+│           │     - Two-node pipeline: extract_tasks → build_plan
+│           │     - TASK_EXTRACTION_PROMPT: structured task list with dependencies
+│           │     - PLAN_CREATION_PROMPT: phased roadmap with priority and timeline
+│           │     - get_project_plan(): returns { task_list, project_plan }
+│           │
+│           ├── chat_agent.py
+│           │     Ollama LLM for conversational follow-up
+│           │     - Keeps last CHAT_HISTORY_TURNS turns in context (default 6)
+│           │     - CHAT_PROMPT: answers questions grounded in the code + prior review
+│           │     - stream_chat(): yields tokens for SSE
+│           │     - Used by /chat/stream endpoint for review, bugfix, and testgen pages
+│           │
+│           └── github_agent.py
+│                 GitHub webhook integration
+│                 - verify_signature(): HMAC-SHA256 validation of webhook payload
+│                 - fetch_file_content(): GitHub Contents API, base64 decode, 80KB limit
+│                 - handle_push(): triggered on branch push — reviews changed .py/.js files,
+│                                  posts collapsible review comment on the commit
+│                 - handle_pull_request(): triggered on PR open/sync/reopen —
+│                                          reviews changed files, posts PR review comment
+│                 - Uses llm_short from code_analysis for concise GitHub comments
+│
+│
+├── frontend/
+│   ├── package.json        Electron app config (name: codeoptimizer, main: src/main.js)
+│   ├── package-lock.json
+│   │
+│   └── src/
+│       ├── main.js         Electron main process
+│       │                     - BrowserWindow: 1280×820, frame:true
+│       │                     - CSP: allows CDN (marked.js, highlight.js) + localhost:8000
+│       │                     - webSecurity:false to allow cross-origin fetch to backend
+│       │                     - Loads index.html
+│       │
+│       └── index.html      Single-page UI — all CSS, HTML, and JS in one file
+│                             Pages:
+│                               Code Review  — input panel + stream-panel (with chat)
+│                               Folder Review— input panel + stream-panel (with file tabs)
+│                               Bug Fixer    — input panel + stream-panel (with chat)
+│                               Test Generator—input panel + stream-panel (with chat)
+│                               Project Planner—input panel + stream-panel (task/plan tabs)
+│
+│                             Key JS functions:
+│                               streamToBubble()  — core SSE stream into a chat bubble;
+│                                                   smart auto-scroll (stops on user scroll)
+│                               renderInBubble()  — renders markdown + syntax highlight
+│                               sendChat()        — sends follow-up to /chat/stream
+│                               runReview()       — calls /review_code/stream
+│                               runBugFix()       — calls /fix_bug/stream
+│                               runTestGen()      — calls /generate_tests/stream
+│                               runPlanner()      — calls /create_plan (non-streaming)
+│                               runFolderReview() — calls /review_folder (non-streaming)
+│                               clearPage()       — resets history, state, buttons
+│
+│                             UI pattern (all pages):
+│                               Left panel  = input (textarea fills available height)
+│                               Right panel = .stream-panel
+│                                 .stream-header  — file/plan tabs (optional)
+│                                 .stream-history — scrollable chat bubbles
+│                                 .chat-input-row — appears after first analysis
+│
+└── backend/test/
+    ├── buggy_code.py       140-line test file with intentional bugs (SQL injection,
+    │                         infinite recursion, mutable defaults, hardcoded creds, etc.)
+    └── error_example.py    Additional error scenario for testing bug fixer
+
+
+Technology Stack
+================
+Backend:   Python 3.11, FastAPI, Uvicorn, LangGraph, LangChain, langchain-ollama
+LLM:       Ollama (local inference) — deepseek-coder:1.3b, llama3.2:1b
+Frontend:  Electron, HTML/CSS/JS (no framework), marked.js, highlight.js
+Webhook:   GitHub Webhooks → ngrok tunnel → FastAPI /webhook/github
+
+
+How to Run
+==========
+See SETUP.txt for the full guide. Quick summary:
+
+  Terminal 1 (backend):
+    cd backend && source venv/bin/activate && cd src
+    uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+  Terminal 2 (frontend):
+    cd frontend && npm start
+
+  Terminal 3 (webhook, optional):
+    ngrok http 127.0.0.1:8000
+    → set https://<id>.ngrok-free.app/webhook/github in GitHub repo settings

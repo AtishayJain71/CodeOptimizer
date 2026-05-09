@@ -7,7 +7,6 @@ from config import settings
 llm = OllamaLLM(
     model=settings.CODE_REVIEW_MODEL,
     temperature=0.2,
-    num_predict=600,
 )
 
 CHAT_PROMPT = """You previously reviewed this {language} code:
@@ -32,7 +31,7 @@ def _format_history(messages: List[dict]) -> str:
     if not messages:
         return "(none)"
     lines = []
-    for m in messages[-6:]:  # last 6 turns to stay within context
+    for m in messages[-settings.CHAT_HISTORY_TURNS:]:
         role = "User" if m["role"] == "user" else "Assistant"
         lines.append(f"{role}: {m['content']}")
     return "\n".join(lines)
