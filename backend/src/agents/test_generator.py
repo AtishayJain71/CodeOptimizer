@@ -1,3 +1,5 @@
+from typing import Generator
+
 from langchain_ollama import OllamaLLM
 from langgraph.constants import END
 from langgraph.graph import StateGraph
@@ -5,46 +7,39 @@ from pydantic import BaseModel
 
 from config import settings
 
-llm = OllamaLLM(model=settings.TEST_GEN_MODEL)
+llm = OllamaLLM(
+    model=settings.TEST_GEN_MODEL,
+    temperature=settings.LLM_TEMPERATURE,
+    num_predict=settings.TESTGEN_MAX_TOKENS,
+)
 
-TEST_PROMPT = """You are a senior QA engineer and test automation expert.
+# Language → test framework mapping shown to the model
+FRAMEWORK = {
+    "python": "pytest",
+    "javascript": "Jest",
+    "typescript": "Jest",
+    "java": "JUnit 5",
+    "go": "Go testing package",
+    "cpp": "Google Test",
+    "ruby": "RSpec",
+    "rust": "Rust built-in #[test]",
+}
 
-Analyze the following {language} code and generate a comprehensive test suite:
+TEST_PROMPT = """Write {framework} tests for the following {language} code.
 
+RULES:
+- Output ONLY valid, runnable {framework} test code. No explanations outside code.
+- Import or require the functions/classes being tested.
+- Each test function name must describe what it tests.
+- Cover: (1) normal inputs, (2) edge cases (empty, zero, None/null, boundary), (3) expected errors/exceptions.
+- Keep each test short and focused on one thing.
+
+Code to test:
 ```{language}
 {code}
 ```
 
-Generate tests covering:
-
-### 1. Unit Tests
-- Test each function/method individually
-- Test normal (happy-path) inputs
-- Test boundary values (empty, zero, max, min)
-- Test expected return types and values
-
-### 2. Edge Cases
-- Null/None/undefined inputs
-- Empty strings, lists, dicts
-- Very large or very small numbers
-- Unexpected types
-
-### 3. Error / Exception Tests
-- Inputs that should raise exceptions
-- Verify the correct exception type is raised
-- Verify error messages where applicable
-
-### 4. Integration Hints
-- Note which functions depend on each other
-- Suggest mock objects where external calls are needed
-
-Format:
-- Use the standard testing framework for {language} (e.g. pytest for Python, Jest for JS)
-- Write actual runnable test code
-- Add a one-line comment above each test explaining what it validates
-- Group tests by class/function being tested
-
-Output ONLY the test code. No explanations outside the code."""
+Start your response with the import statements. Output only code."""
 
 
 class TestGenState(BaseModel):
@@ -58,15 +53,35 @@ workflow = StateGraph(TestGenState)
 
 @workflow.add_node
 def generate_tests(state: TestGenState) -> TestGenState:
-    prompt = TEST_PROMPT.format(language=state.language, code=state.code)
+    framework = FRAMEWORK.get(state.language.lower(), state.language + " testing framework")
+    prompt = TEST_PROMPT.format(
+        framework=framework,
+        language=state.language,
+        code=state.code,
+    )
     tests = llm.invoke(prompt)
-    return state.model_copy(update={"tests": tests})
+
+    # Strip markdown fences if the model wrapped its output
+    cleaned = tests.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        # Remove first and last fence lines
+        inner = [l for l in lines if not l.strip().startswith("```")]
+        cleaned = "\n".join(inner).strip()
+
+    return state.model_copy(update={"tests": cleaned})
 
 
 workflow.set_entry_point("generate_tests")
 workflow.add_edge("generate_tests", END)
 
 test_gen_executor = workflow.compile()
+
+
+def stream_tests(code: str, language: str = "python") -> Generator[str, None, None]:
+    framework = FRAMEWORK.get(language.lower(), language + " testing framework")
+    prompt = TEST_PROMPT.format(framework=framework, language=language, code=code)
+    yield from llm.stream(prompt)
 
 
 def get_test_cases(code: str, language: str = "python") -> str:

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List
+from typing import Dict, Generator, List
 
 from langchain_ollama import OllamaLLM
 from langgraph.constants import END
@@ -8,55 +8,67 @@ from pydantic import BaseModel
 
 from config import settings
 
-llm = OllamaLLM(model=settings.CODE_REVIEW_MODEL)
+llm = OllamaLLM(
+    model=settings.CODE_REVIEW_MODEL,
+    temperature=settings.LLM_TEMPERATURE,
+    num_predict=settings.REVIEW_MAX_TOKENS,
+)
 
-REVIEW_PROMPT = """You are an expert code reviewer specializing in high-performance computing, security, and software architecture.
-Analyze the following {language} code and provide a professional, structured review.
+llm_short = OllamaLLM(
+    model=settings.CODE_REVIEW_MODEL,
+    temperature=settings.LLM_TEMPERATURE,
+    num_predict=settings.GITHUB_MAX_TOKENS,
+)
+
+# ── Prompts ────────────────────────────────────────────────────────────────────
+
+FULL_REVIEW_PROMPT = """You are a senior code reviewer. Analyze this {language} code strictly.
+
+RULES:
+- Only report issues that are DIRECTLY VISIBLE in the code below. No assumptions.
+- Rank by severity: CRITICAL first, then SECURITY, then PERF, then QUALITY.
+- Merge related issues into one bullet. No duplicates.
+- Hard stop after 5 bullets. If fewer real issues exist, list only those.
+- Each bullet: one line description + one line fix. No padding.
 
 ```{language}
 {code}
 ```
 
-Respond ONLY with a markdown-formatted review using this exact structure:
-
 ## Code Review
 
-### 1. Errors & Bugs
-- List syntax errors, logical mistakes, undefined behaviors, and edge cases.
-- For each issue: describe it and provide a fix.
+**Priority Issues** (🔴 CRITICAL → 🟠 SECURITY → 🟡 PERF → 🟢 QUALITY):
+"""
 
-### 2. Performance & Optimization
-- Identify inefficient algorithms, redundant operations, slow logic.
-- Suggest optimized alternatives with reasoning.
+SHORT_REVIEW_PROMPT = """Review this {language} code for a GitHub PR. Be strict and concise.
 
-### 3. Code Quality & Maintainability
-- Evaluate structure, readability, modularity.
-- Flag SOLID/DRY/KISS violations and suggest refactoring.
+RULES:
+- Only report issues visible in the code. No guessing.
+- Merge related issues. No duplicates. Max 5 bullets. Stop after 5.
 
-### 4. Security & Reliability
-- Identify injection risks, unsafe input handling, concurrency issues.
-- Recommend secure alternatives and better error handling.
+```{language}
+{code}
+```
 
-### 5. Best Practices & Standards
-- Assess naming, function decomposition, error handling.
-- Recommend language-specific improvements.
+Issues (most critical first):
+"""
 
-Rules:
-- Do NOT describe the file's purpose — focus only on the review.
-- Do NOT make assumptions about missing parts — analyze only what is provided.
-- Be specific and actionable."""
 
+# ── State ──────────────────────────────────────────────────────────────────────
 
 class CodeReviewState(BaseModel):
     file_path: str = ""
     project_path: str = ""
     code: str = ""
     language: str = "python"
+    short_review: bool = False
     ignore_files: List[str] = []
     file_extensions: List[str] = []
     files_found: List[str] = []
     report: Dict[str, str] = {}
 
+
+# ── Workflow (used for non-streaming calls) ────────────────────────────────────
 
 workflow = StateGraph(CodeReviewState)
 
@@ -84,14 +96,14 @@ def find_files_found(state: CodeReviewState) -> CodeReviewState:
 @workflow.add_node
 def review_code(state: CodeReviewState) -> CodeReviewState:
     report = {}
+    model = llm_short if state.short_review else llm
+    prompt_template = SHORT_REVIEW_PROMPT if state.short_review else FULL_REVIEW_PROMPT
 
-    # Direct code string (no file)
     if state.code:
-        prompt = REVIEW_PROMPT.format(language=state.language, code=state.code)
-        report["__inline__"] = llm.invoke(prompt)
+        prompt = prompt_template.format(language=state.language, code=state.code)
+        report["__inline__"] = model.invoke(prompt)
         return state.model_copy(update={"report": report})
 
-    # File(s)
     for file in state.files_found:
         try:
             with open(file, "r", encoding="utf-8") as f:
@@ -99,11 +111,10 @@ def review_code(state: CodeReviewState) -> CodeReviewState:
         except Exception as e:
             report[file] = f"Error reading file: {e}"
             continue
-
         _, ext = os.path.splitext(file)
         language = ext.lstrip(".") or "text"
-        prompt = REVIEW_PROMPT.format(language=language, code=code)
-        report[file] = llm.invoke(prompt)
+        prompt = prompt_template.format(language=language, code=code)
+        report[file] = model.invoke(prompt)
 
     return state.model_copy(update={"report": report})
 
@@ -115,17 +126,34 @@ workflow.add_edge("review_code", END)
 code_review_executor = workflow.compile()
 
 
+# ── Streaming generators ───────────────────────────────────────────────────────
+
+def stream_code_review(code: str, language: str = "python") -> Generator[str, None, None]:
+    prompt = FULL_REVIEW_PROMPT.format(language=language, code=code)
+    yield from llm.stream(prompt)
+
+
+def stream_short_review(code: str, language: str = "python") -> Generator[str, None, None]:
+    prompt = SHORT_REVIEW_PROMPT.format(language=language, code=code)
+    yield from llm_short.stream(prompt)
+
+
+# ── Non-streaming public API ───────────────────────────────────────────────────
+
 def get_code_review_for_code(code: str, language: str = "python") -> dict:
+    result = code_review_executor.invoke(CodeReviewState(code=code, language=language))
+    return dict(result["report"])
+
+
+def get_short_review_for_code(code: str, language: str = "python") -> dict:
     result = code_review_executor.invoke(
-        CodeReviewState(code=code, language=language)
+        CodeReviewState(code=code, language=language, short_review=True)
     )
     return dict(result["report"])
 
 
 def get_code_review_for_file(file_path: str) -> dict:
-    result = code_review_executor.invoke(
-        CodeReviewState(file_path=file_path)
-    )
+    result = code_review_executor.invoke(CodeReviewState(file_path=file_path))
     return dict(result["report"])
 
 

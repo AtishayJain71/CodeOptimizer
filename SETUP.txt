@@ -85,10 +85,10 @@ STEP 6 — Set Up the Python Virtual Environment
     pip install --upgrade pip
 
   Install all dependencies:
-    pip install -r requirements.txt
+    pip3 install -r requirements.txt
 
   Verify key packages installed:
-    pip show fastapi uvicorn langchain langgraph
+    pip3 show fastapi uvicorn langchain langgraph
 
 
 STEP 7 — Install Frontend Dependencies
@@ -252,7 +252,7 @@ TERMINAL 4 — Frontend (Electron app)
       "
     You should see:  POST  /webhook/github  ->  200
 
-
+a
 ================================================================================
   PART 4 — USING THE APP
 ================================================================================

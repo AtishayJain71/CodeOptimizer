@@ -5,7 +5,7 @@ from typing import Callable, List, Optional, Tuple
 
 import httpx
 
-from agents.code_analysis import get_code_review_for_code
+from agents.code_analysis import get_short_review_for_code
 
 GITHUB_API = "https://api.github.com"
 
@@ -165,7 +165,7 @@ def _analyze_and_post(
             continue
 
         lang = _language(path)
-        result = get_code_review_for_code(content, lang)
+        result = get_short_review_for_code(content, lang)
         review_text = result.get("__inline__", "No review generated.")
         file_reviews.append((path, review_text))
 

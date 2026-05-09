@@ -5,7 +5,11 @@ from pydantic import BaseModel
 
 from config import settings
 
-llm = OllamaLLM(model=settings.PLANNING_MODEL)
+llm = OllamaLLM(
+    model=settings.PLANNING_MODEL,
+    temperature=settings.LLM_TEMPERATURE,
+    num_predict=settings.PLAN_MAX_TOKENS,
+)
 
 TASK_EXTRACTION_PROMPT = """You are an expert project analyst.
 
