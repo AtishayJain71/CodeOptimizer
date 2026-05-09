@@ -8,20 +8,20 @@ _ENV_FILE = Path(__file__).parent.parent / ".env"
 class Settings(BaseSettings):
     # Ollama model names — change to match what you have pulled locally.
     # Run `ollama list` to see available models.
-    CODE_REVIEW_MODEL: str = "deepseek-coder:1.3b"
-    BUG_FIX_MODEL: str = "deepseek-coder:1.3b"
-    PLANNING_MODEL: str = "llama3.2:1b"
-    TEST_GEN_MODEL: str = "deepseek-coder:1.3b"
+    CODE_REVIEW_MODEL: str = "qwen2.5-coder:7b"
+    BUG_FIX_MODEL: str = "qwen2.5-coder:7b"
+    PLANNING_MODEL: str = "llama3.1:8b"
+    TEST_GEN_MODEL: str = "qwen2.5-coder:7b"
 
     # GitHub comment token limit — kept short so comments fit in PR timeline.
     # All other agents have no num_predict cap; conciseness is enforced via prompt.
     GITHUB_MAX_TOKENS: int = 600
 
     # Chat history turns to keep in context.
-    # deepseek-coder:1.3b has a 4096-token context window.
+    # qwen2.5-coder:7b has a 32k-token context window.
     # Budget: ~1500 tokens (code + review) + CHAT_HISTORY_TURNS * ~200 tokens each.
-    # Keep CHAT_HISTORY_TURNS ≤ 12 to stay within the 4096-token window.
-    CHAT_HISTORY_TURNS: int = 6
+    # Can safely raise this; 20 turns well within the 32k window.
+    CHAT_HISTORY_TURNS: int = 12
 
     LLM_TEMPERATURE: float = 0.1
 
